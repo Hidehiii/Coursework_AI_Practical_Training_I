@@ -1,1 +1,4 @@
-# Coursework_AI_Practical_Training_I
+# Coursework AI Practical Training I
+
+### Team members: Xuan Cui, Dongsheng Yan, Yu Chen.
+### School: SCAU.
