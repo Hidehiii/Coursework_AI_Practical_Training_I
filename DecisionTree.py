@@ -13,8 +13,8 @@ def DecisionTree():
 
     # 预处理
     # 特征选择
-    x = data.drop('target', axis=1)
-    y = data['target']
+    x = data.data
+    y = data.target
 
     # 标准化
     scaler = StandardScaler()
