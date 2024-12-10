@@ -32,7 +32,7 @@ def DecisionTree():
 
     # 评估模型
     accuracy = accuracy_score(y_test, y_pred)
-    print("准确率：", accuracy)
+    print("Decision Tree 准确率：", accuracy)
 
 if __name__ == '__main__':
     pass

@@ -31,7 +31,7 @@ def SVM():
 
     # 评估模型
     accuracy = accuracy_score(y_test, y_pred)
-    print("准确率：", accuracy)
+    print("SVM 准确率：", accuracy)
 
 
 
