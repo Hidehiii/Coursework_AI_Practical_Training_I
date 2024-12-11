@@ -133,8 +133,15 @@ class CustomAlexNet(nn.Module):
 def train_model(model, dataloader, criterion, optimizer, num_epochs=5):
     model.train()
     model.to(device)
+
+    train_losses = []
+    train_accuracies = []
+
+
     for epoch in range(num_epochs):
         running_loss = 0.0
+        correct = 0
+        total = 0
         for images, labels in dataloader:
             images, labels = images.to(device), labels.to(device)
             optimizer.zero_grad()
@@ -143,8 +150,19 @@ def train_model(model, dataloader, criterion, optimizer, num_epochs=5):
             loss.backward()
             optimizer.step()
             running_loss += loss.item()
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+
+            epoch_loss = running_loss / len(dataloader)
+            epoch_accuracy = 100 * correct / total
+
+            train_losses.append(epoch_loss)
+            train_accuracies.append(epoch_accuracy)
 
         print(f"Epoch [{epoch + 1}/{num_epochs}], Loss: {running_loss / len(dataloader):.4f}")
+
+    return train_losses, train_accuracies
 
     # 8. 训练模型
 
@@ -152,16 +170,45 @@ def train_model(model, dataloader, criterion, optimizer, num_epochs=5):
 model = CustomAlexNet()
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-train_model(model, train_loader, criterion, optimizer, num_epochs=5)
+train_losses, train_accuracies = train_model(model, train_loader, criterion, optimizer, num_epochs=5)
 
 
-# 9. 测试模型并比较训练效果（可选）
+# 9. 可视化训练过程
+def plot_training_history(train_losses, train_accuracies):
+    epochs = range(1, len(train_losses) + 1)
+
+    plt.figure(figsize=(12, 5))
+
+    # 绘制训练损失
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, train_losses, label='Training Loss')
+    plt.title('Training Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.grid(True)
+
+    # 绘制训练准确率
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs, train_accuracies, label='Training Accuracy', color='orange')
+    plt.title('Training Accuracy')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy (%)')
+    plt.grid(True)
+
+    plt.tight_layout()
+    plt.show()
+
+
+plot_training_history(train_losses, train_accuracies)
+
+# 10. 测试模型并比较训练效果（可选）
 # 在测试集上评估模型准确率
 def evaluate_model(model, test_loader):
     model.eval()
     model.to(device)
     correct = 0
     total = 0
+    accuracies = []
     with torch.no_grad():
         for images, labels in test_loader:
             images, labels = images.to(device), labels.to(device)
@@ -169,7 +216,65 @@ def evaluate_model(model, test_loader):
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
+            accuracies.append(100 * correct / total)
     print(f'Accuracy: {100 * correct / total:.2f}%')
+    return accuracies
 
 
-evaluate_model(model, test_loader)
+test_accuracy = evaluate_model(model, test_loader)
+
+# 可视化测试结果
+def plot_test_results(train_accuracies, test_accuracy):
+    epochs = range(1, min(len(train_accuracies), len(test_accuracy)) + 1)
+
+    plt.figure(figsize=(6, 6))
+    plt.plot(epochs, train_accuracies[:len(epochs)], label='Training Accuracy', color='orange')
+    plt.plot(epochs, test_accuracy[:len(epochs)], label='Test Accuracy', color='blue')
+    # 显示label
+    plt.legend()
+    plt.title('Model Accuracy Comparison')
+    plt.ylabel('Accuracy (%)')
+    plt.show()
+
+plot_test_results(train_accuracies, test_accuracy)
+
+# 11. 测试模型并比较结果
+def visualize_test_results(model, test_loader, num_images=6):
+    model.eval()
+    model.to(device)
+    images, labels = [], []
+
+    for _ in range(num_images):
+        idx = random.randint(0, len(test_loader.dataset) - 1)
+        img, label = test_loader.dataset[idx]  # 获取图像、标签路径
+        images.append(img.unsqueeze(0))  # 增加批处理维度
+        labels.append(label)
+
+    images = torch.cat(images)  # 合并图像
+    labels = torch.tensor(labels)  # 转换为tensor
+
+    with torch.no_grad():
+        images, labels = images.to(device), labels.to(device)
+        outputs = model(images)
+        _, predicted = torch.max(outputs.data, 1)
+
+    # 可视化结果
+    plt.figure(figsize=(15, 5))
+    for i in range(num_images):
+        plt.subplot(2, num_images, i + 1)
+        img = images[i].cpu().numpy().transpose((1, 2, 0))  # 转换为HWC格式
+        img = img * 0.5 + 0.5  # 反归一化
+        plt.imshow(img)
+        plt.axis('off')
+        plt.title(f'Pred: {"Dog" if predicted[i].item() else "Cat"}')
+
+        # 显示正确标签
+        plt.subplot(2, num_images, num_images + i + 1)
+        plt.imshow(img)
+        plt.axis('off')
+        plt.title(f'True: {"Dog" if labels[i].item() else "Cat"}')
+
+    plt.tight_layout()
+    plt.show()
+
+visualize_test_results(model, test_loader)
