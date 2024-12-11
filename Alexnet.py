@@ -1,11 +1,16 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from torchvision import models
 from sklearn.datasets import load_breast_cancer
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
+import torch.nn.functional as F
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 
 # 加载乳腺癌数据集
 data = load_breast_cancer()
@@ -31,32 +36,43 @@ visualize_features(X, y)
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-# PCA降维（任选您的要求）
+# PCA降维（可选）
 pca = PCA(n_components=10)  # 选择10个主成分
 X_pca = pca.fit_transform(X_scaled)
 
 # 划分训练集和测试集
 X_train, X_test, y_train, y_test = train_test_split(X_pca, y, test_size=0.2, random_state=42)
 
-# 转换为张量类型
-X_train_tensor = torch.from_numpy(X_train).float()
-y_train_tensor = torch.from_numpy(y_train).long()  # 确保目标为长整型
-X_test_tensor = torch.from_numpy(X_test).float()
-y_test_tensor = torch.from_numpy(y_test).long()  # 确保目标为长整型
+# 转换为张量类型并调整形状为4D
+X_train_tensor = torch.from_numpy(X_train).float().view(-1, 1, 1, 10)  # 4D: batch size, channels, height, width
+y_train_tensor = torch.from_numpy(y_train).long()
+X_test_tensor = torch.from_numpy(X_test).float().view(-1, 1, 1, 10)  # 4D: batch size, channels, height, width
+y_test_tensor = torch.from_numpy(y_test).long()
+
+# 用cuda GPU加速
+X_train_tensor = X_train_tensor.to(device)
+y_train_tensor = y_train_tensor.to(device)
+X_test_tensor = X_test_tensor.to(device)
+y_test_tensor = y_test_tensor.to(device)
 
 
-# 定义全连接神经网络模型
-class MLPModel(nn.Module):
-    def __init__(self, num_classes=2):
-        super(MLPModel, self).__init__()
-        self.fc1 = nn.Linear(10, 64)  # 输入特征数为10，输出为64个神经元
-        self.fc2 = nn.Linear(64, 32)  # 隐藏层
-        self.fc3 = nn.Linear(32, num_classes)  # 输出层
+# 定义修改后的AlexNet模型
+class ModifiedAlexNet(nn.Module):
+    def __init__(self):
+        super(ModifiedAlexNet, self).__init__()
+        self.alexnet = models.alexnet(weights='DEFAULT')
+
+        # 修改输入层 - 第一个卷积层
+        self.alexnet.features[0] = nn.Conv2d(1, 64, kernel_size=(1, 1), stride=(1, 1), padding=(0, 0))
+        # 之后的卷积层调整使其兼容小输入
+        self.alexnet.features[1] = nn.BatchNorm2d(64)  # 保留BN层
+        self.alexnet.features[2] = nn.ReLU(inplace=True)
+        # self.alexnet.features[3] = nn.MaxPool2d(kernel_size=1)  # 更改池化层
+        # 替换最后的分类器
+        self.alexnet.classifier[6] = nn.Linear(4096, 2)  # 输出2个类别
 
     def forward(self, x):
-        x = torch.relu(self.fc1(x))  # ReLU激活
-        x = torch.relu(self.fc2(x))  # ReLU激活
-        return self.fc3(x)
+        return self.alexnet(x)
 
     # 训练模型函数
 
@@ -75,6 +91,9 @@ def train_model(model, X_train_tensor, y_train_tensor, num_epochs=10, batch_size
         for i in range(0, len(X_train_tensor), batch_size):
             inputs = X_train_tensor[i:i + batch_size]
             labels = y_train_tensor[i:i + batch_size]
+
+            inputs = inputs.repeat(1, 1, 10, 1)  # 重复3次，使其符合AlexNet输入要求
+            #inputs = F.interpolate(inputs, size=(11, 11), mode='bilinear', align_corners=False)
 
             optimizer.zero_grad()
             outputs = model(inputs)
@@ -99,7 +118,8 @@ num_epochs = 10
 results = {}
 
 for lr in learning_rates:
-    model = MLPModel()
+    model = ModifiedAlexNet()
+    model.to(device)
     train_loss, train_accuracy = train_model(model, X_train_tensor, y_train_tensor, num_epochs=num_epochs,
                                              learning_rate=lr)
     results[lr] = {'loss': train_loss, 'accuracy': train_accuracy}
